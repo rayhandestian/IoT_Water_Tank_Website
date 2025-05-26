@@ -192,6 +192,298 @@ void checkPumpStatus() {
 }
 ```
 
+## MicroPython Implementation
+
+### Setup
+
+MicroPython is an alternative to Arduino for ESP32 programming. Here's how to implement the same functionality using MicroPython:
+
+#### Required Libraries
+
+First, make sure to upload these libraries to your ESP32:
+- `urequests.py` - HTTP client
+- `ujson.py` - JSON parsing
+
+You can download these from the [MicroPython libraries repository](https://github.com/micropython/micropython-lib).
+
+### Example Implementation
+
+```python
+import network
+import urequests
+import ujson
+import time
+import machine
+from machine import Pin, Timer
+
+# Configuration
+WIFI_SSID = "YourWiFiSSID"
+WIFI_PASSWORD = "YourWiFiPassword"
+SERVER_URL = "http://your-server-ip:3000/api"
+API_KEY = "your-api-key-here"
+TANK_HEIGHT = 100  # cm
+
+# Pin definitions
+TRIGGER_PIN = 5
+ECHO_PIN = 18
+PUMP_PIN = 23
+
+# Initialize pump control pin
+pump = Pin(PUMP_PIN, Pin.OUT)
+pump.off()  # Start with pump off
+
+# Connect to WiFi
+def connect_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    
+    if not wlan.isconnected():
+        print("Connecting to WiFi...")
+        wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+        
+        # Wait for connection with timeout
+        max_wait = 10
+        while max_wait > 0:
+            if wlan.isconnected():
+                break
+            max_wait -= 1
+            print("Waiting for connection...")
+            time.sleep(1)
+            
+    if wlan.isconnected():
+        print("Connected to WiFi")
+        print("IP:", wlan.ifconfig()[0])
+        return True
+    else:
+        print("Failed to connect to WiFi")
+        return False
+
+# Ultrasonic sensor reading
+def read_water_level():
+    # Initialize ultrasonic sensor pins
+    trigger = Pin(TRIGGER_PIN, Pin.OUT)
+    echo = Pin(ECHO_PIN, Pin.IN)
+    
+    # Send pulse
+    trigger.off()
+    time.sleep_us(2)
+    trigger.on()
+    time.sleep_us(10)
+    trigger.off()
+    
+    # Wait for echo
+    while echo.value() == 0:
+        start = time.ticks_us()
+    
+    while echo.value() == 1:
+        end = time.ticks_us()
+    
+    # Calculate distance
+    duration = time.ticks_diff(end, start)
+    distance_cm = (duration * 0.0343) / 2
+    
+    # Convert to water level
+    water_level = TANK_HEIGHT - distance_cm
+    
+    # Validate readings
+    if water_level < 0:
+        water_level = 0
+    if water_level > TANK_HEIGHT:
+        water_level = TANK_HEIGHT
+        
+    print("Water level:", water_level, "cm")
+    return water_level
+
+# Control the pump
+def control_pump(turn_on):
+    if turn_on:
+        pump.on()
+        print("Pump turned ON")
+    else:
+        pump.off()
+        print("Pump turned OFF")
+
+# Send water level data to server
+def send_water_level():
+    try:
+        water_level = read_water_level()
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'X-API-KEY': API_KEY
+        }
+        
+        data = {
+            'level_cm': water_level
+        }
+        
+        response = urequests.post(
+            SERVER_URL + "/data", 
+            headers=headers,
+            json=data
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            pump_on = response_data.get('pump_on', False)
+            auto_mode = response_data.get('auto_mode', True)
+            
+            control_pump(pump_on)
+            
+            print("Data sent successfully")
+            print("Pump status:", "ON" if pump_on else "OFF")
+            print("Auto mode:", "ENABLED" if auto_mode else "DISABLED")
+        else:
+            print("Error sending data:", response.status_code)
+            handle_server_error()
+            
+        response.close()
+    except Exception as e:
+        print("Exception in send_water_level:", e)
+        handle_server_error()
+
+# Check pump status
+def check_pump_status():
+    try:
+        headers = {
+            'X-API-KEY': API_KEY
+        }
+        
+        response = urequests.get(
+            SERVER_URL + "/status", 
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            pump_on = response_data.get('pump_on', False)
+            auto_mode = response_data.get('auto_mode', True)
+            
+            control_pump(pump_on)
+            
+            print("Status check successful")
+            print("Pump status:", "ON" if pump_on else "OFF")
+            print("Auto mode:", "ENABLED" if auto_mode else "DISABLED")
+        else:
+            print("Error checking status:", response.status_code)
+            handle_server_error()
+            
+        response.close()
+    except Exception as e:
+        print("Exception in check_pump_status:", e)
+        handle_server_error()
+
+# Handle server errors with local fallback logic
+def handle_server_error():
+    water_level = read_water_level()
+    
+    # Simple local fallback logic
+    if water_level < 10.0:
+        # Critical low level - turn on pump
+        control_pump(True)
+        print("SERVER ERROR: Running emergency mode - PUMP ON")
+    elif water_level > 90.0:
+        # High level - turn off pump
+        control_pump(False)
+        print("SERVER ERROR: Running emergency mode - PUMP OFF")
+
+# Main application
+def main():
+    # Connect to WiFi
+    if not connect_wifi():
+        return
+    
+    # Send initial data
+    send_water_level()
+    
+    # Setup periodic tasks
+    data_timer = Timer(0)
+    status_timer = Timer(1)
+    
+    # Send data every 60 seconds
+    data_timer.init(
+        period=60000, 
+        mode=Timer.PERIODIC, 
+        callback=lambda t: send_water_level()
+    )
+    
+    # Check status every 10 seconds
+    status_timer.init(
+        period=10000, 
+        mode=Timer.PERIODIC, 
+        callback=lambda t: check_pump_status()
+    )
+    
+    print("IoT Water Tank Monitor running")
+
+# Start the application
+if __name__ == "__main__":
+    main()
+```
+
+### Installing on ESP32
+
+To use this code on your ESP32 with MicroPython:
+
+1. **Flash MicroPython firmware** to your ESP32 using tools like `esptool.py`
+2. **Connect to the ESP32** using a tool like `ampy`, `rshell`, or the WebREPL
+3. **Upload the code** as `main.py` so it runs automatically on boot
+4. **Upload required libraries** (`urequests.py` and `ujson.py`)
+
+For example, using `ampy`:
+```bash
+ampy --port /dev/ttyUSB0 put urequests.py
+ampy --port /dev/ttyUSB0 put ujson.py
+ampy --port /dev/ttyUSB0 put main.py
+```
+
+### Alternative Sensor Implementation (HC-SR04 Library)
+
+For more reliable ultrasonic sensor readings, you can use the HCSR04 library:
+
+```python
+# First, upload the hcsr04.py library to your ESP32
+from hcsr04 import HCSR04
+import time
+
+# Initialize sensor
+sensor = HCSR04(trigger_pin=5, echo_pin=18)
+
+def read_water_level():
+    # Take multiple readings for better accuracy
+    distance_sum = 0
+    valid_readings = 0
+    
+    for _ in range(3):
+        try:
+            distance = sensor.distance_cm()
+            if 0 < distance < 400:  # Filter out invalid readings
+                distance_sum += distance
+                valid_readings += 1
+        except Exception as e:
+            print("Sensor reading error:", e)
+        
+        time.sleep(0.1)
+    
+    # Calculate average if we have valid readings
+    if valid_readings > 0:
+        distance_cm = distance_sum / valid_readings
+        water_level = TANK_HEIGHT - distance_cm
+        
+        # Validate water level
+        if water_level < 0:
+            water_level = 0
+        if water_level > TANK_HEIGHT:
+            water_level = TANK_HEIGHT
+            
+        print("Water level:", water_level, "cm")
+        return water_level
+    
+    # Return last known valid reading or default
+    print("No valid readings")
+    return 0
+```
+
 ## Implementation Tips
 
 ### Water Level Sensing
