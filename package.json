@@ -11,7 +11,8 @@
     "frontend:dev": "cd frontend && npm run dev",
     "setup": "npm install & npm run frontend:install",
     "build": "npm run frontend:build",
-    "dev:all": "npx concurrently \"npm run dev\" \"npm run frontend:dev\""
+    "dev:all": "npx concurrently \"npm run dev\" \"npm run frontend:dev\"",
+    "postinstall": "npm run frontend:install && npm run frontend:build"
   },
   "dependencies": {
     "cors": "^2.8.5",
