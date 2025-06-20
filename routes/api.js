@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
-// Get tank height from environment variables, default to 100cm
+// Get configuration from environment variables, with defaults
 const TANK_HEIGHT_CM = parseInt(process.env.TANK_HEIGHT_CM || '100', 10);
+const REFRESH_INTERVAL_MS = parseInt(process.env.REFRESH_INTERVAL_MS || '5000', 10);
 
 // Middleware to validate ESP32 API key
 const validateApiKey = (req, res, next) => {
@@ -81,7 +82,8 @@ router.get('/latest', asyncHandler(async (req, res) => {
       timestamp: new Date(),
       pump_on: false,
       auto_mode: true,
-      tank_height_cm: TANK_HEIGHT_CM
+      tank_height_cm: TANK_HEIGHT_CM,
+      refresh_interval_ms: REFRESH_INTERVAL_MS
     });
   }
   
@@ -90,7 +92,8 @@ router.get('/latest', asyncHandler(async (req, res) => {
     timestamp: sensorRows[0].timestamp,
     pump_on: pumpRows[0].is_on,
     auto_mode: pumpRows[0].auto_mode,
-    tank_height_cm: TANK_HEIGHT_CM
+    tank_height_cm: TANK_HEIGHT_CM,
+    refresh_interval_ms: REFRESH_INTERVAL_MS
   });
 }));
 
@@ -143,7 +146,8 @@ router.post('/auto', asyncHandler(async (req, res) => {
 // GET /api/config - Get configuration values
 router.get('/config', (req, res) => {
   res.json({
-    tank_height_cm: TANK_HEIGHT_CM
+    tank_height_cm: TANK_HEIGHT_CM,
+    refresh_interval_ms: REFRESH_INTERVAL_MS
   });
 });
 

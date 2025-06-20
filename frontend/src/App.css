@@ -55,4 +55,11 @@
 
 .chart-error {
   color: var(--danger-color);
+}
+
+/* Add style for the refresh-info div */
+.refresh-info {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 1rem;
 } 

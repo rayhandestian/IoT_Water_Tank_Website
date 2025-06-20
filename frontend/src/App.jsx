@@ -10,7 +10,8 @@ function App() {
     timestamp: new Date().toISOString(),
     pump_on: false,
     auto_mode: true,
-    tank_height_cm: 100 // Default value, will be updated from API
+    tank_height_cm: 100, // Default value, will be updated from API
+    refresh_interval_ms: 5000 // Default value, will be updated from API
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -67,10 +68,10 @@ function App() {
     
     const interval = setInterval(() => {
       fetchData();
-    }, 5000); // Poll every 5 seconds
+    }, data.refresh_interval_ms); // Use refresh interval from API
     
     return () => clearInterval(interval);
-  }, []);
+  }, [data.refresh_interval_ms]); // Re-create interval when refresh_interval_ms changes
 
   // Calculate water level percentage based on tank height from API
   const calculateWaterHeight = () => {
@@ -125,6 +126,9 @@ function App() {
               </div>
               <div className="timestamp">
                 Last updated: {formatTimestamp(data.timestamp)}
+              </div>
+              <div className="refresh-info">
+                Refresh interval: {data.refresh_interval_ms / 1000} seconds
               </div>
               <button 
                 className="history-button" 
