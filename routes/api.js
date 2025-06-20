@@ -160,23 +160,47 @@ router.get('/latest', asyncHandler(async (req, res) => {
   });
 }));
 
-// GET /api/history - Get historical sensor data
+// GET /api/history - Get historical sensor data with time-based filtering
 router.get('/history', asyncHandler(async (req, res) => {
   const pool = db.getPool();
-  const limit = parseInt(req.query.limit || '24', 10); // Default to last 24 entries
+  const minutesAgo = parseInt(req.query.minutes_ago || MAX_HISTORY_MINUTES_AGO.toString(), 10);
+  const maxDataPoints = parseInt(req.query.max_points || '100', 10);
   
-  // Get historical data with a reasonable limit
+  // Calculate cutoff time
+  const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+  
+  // Get historical data within time range
   const [rows] = await pool.query(
-    'SELECT level_cm, timestamp FROM sensor_data ORDER BY timestamp DESC LIMIT ?', 
-    [Math.min(limit, 100)] // Cap at 100 entries to prevent excessive data transfer
+    `SELECT level_cm, timestamp 
+     FROM sensor_data 
+     WHERE timestamp >= ? 
+     ORDER BY timestamp DESC 
+     LIMIT ?`, 
+    [cutoffTime, Math.min(maxDataPoints, 200)] // Cap at 200 entries
   );
   
-  // Return data in chronological order (oldest first)
+  // For dense data, reduce points to improve performance
+  let processedData = rows.reverse(); // Chronological order
+  
+  if (processedData.length > maxDataPoints) {
+    // Simple data reduction: take every nth point to reach target count
+    const step = Math.ceil(processedData.length / maxDataPoints);
+    processedData = processedData.filter((_, index) => index % step === 0);
+    
+    // Always include the last data point
+    if (processedData[processedData.length - 1] !== rows[0]) {
+      processedData.push(rows[0]);
+    }
+  }
+  
   res.json({
-    history: rows.reverse(),
+    history: processedData,
     tank_height_cm: TANK_HEIGHT_CM,
     max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO,
-    refresh_interval_ms: REFRESH_INTERVAL_MS
+    refresh_interval_ms: REFRESH_INTERVAL_MS,
+    total_points: rows.length,
+    filtered_points: processedData.length,
+    time_range_minutes: minutesAgo
   });
 }));
 

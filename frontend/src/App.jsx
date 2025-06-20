@@ -394,10 +394,11 @@ function App() {
                 <span className="icon-chart">📊</span>
                 Water Level History
               </h2>
-                              <WaterLevelChart 
-                  tankHeight={data.tank_height_cm} 
-                  maxHistoryMinutesAgo={data.max_history_minutes_ago}
-                />
+              <WaterLevelChart 
+                tankHeight={data.tank_height_cm} 
+                maxHistoryMinutesAgo={data.max_history_minutes_ago}
+                refreshIntervalMs={data.refresh_interval_ms}
+              />
             </div>
           )}
         </>
