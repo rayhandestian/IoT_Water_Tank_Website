@@ -1,10 +1,13 @@
 .error-message {
-  background-color: var(--danger-color);
+  background: linear-gradient(135deg, var(--danger-color) 0%, #ef4444 100%);
   color: white;
-  padding: 1rem;
-  border-radius: 5px;
-  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
   text-align: center;
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .loading {
@@ -14,22 +17,60 @@
   height: 300px;
   font-size: 1.5rem;
   color: var(--primary-color);
+  font-weight: 600;
+  position: relative;
+}
+
+.loading::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--primary-color);
+  border-top: 3px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .history-button {
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
-  background-color: var(--primary-color);
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.3s;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.history-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
 }
 
 .history-button:hover {
-  background-color: #005fa3;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.history-button:hover::before {
+  left: 100%;
 }
 
 .history-card {
@@ -38,8 +79,12 @@
 }
 
 .chart-container {
-  height: 300px;
-  margin-top: 1rem;
+  height: 400px;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--secondary-color);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
 }
 
 .chart-loading,
@@ -49,121 +94,174 @@
   justify-content: center;
   align-items: center;
   height: 300px;
-  font-size: 1rem;
-  color: #666;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-light);
 }
 
 .chart-error {
   color: var(--danger-color);
 }
 
-/* Add style for the refresh-info div */
 .refresh-info {
   font-size: 0.9rem;
-  color: #666;
+  color: var(--text-light);
   margin-bottom: 1rem;
+  text-align: center;
+  padding: 0.5rem;
+  background: var(--secondary-color);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
 }
 
 /* Authentication styles */
 .auth-section {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  position: relative;
+}
+
+.auth-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+  border-radius: 12px 12px 0 0;
 }
 
 .password-input-container {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .password-input {
   flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
   font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
 }
 
 .password-input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.25);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  transform: translateY(-1px);
 }
 
 .auth-button {
-  padding: 0.5rem 1rem;
-  background-color: var(--primary-color);
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 1rem;
-  transition: background-color 0.3s;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
 }
 
 .auth-button:hover {
-  background-color: #005fa3;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.auth-button:hover::before {
+  left: 100%;
 }
 
 .auth-error {
   color: var(--danger-color);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .authenticated-indicator {
   display: flex;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 0.75rem;
-  background-color: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 4px;
-  color: #155724;
+  margin-bottom: 2rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  color: #065f46;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
 }
 
 .authenticated-indicator span {
   flex: 1;
-  margin-left: 0.5rem;
+  margin-left: 0.75rem;
 }
 
 .logout-button {
-  padding: 0.25rem 0.5rem;
-  background-color: #6c757d;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: background-color 0.3s;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .logout-button:hover {
-  background-color: #5a6268;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .auth-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   align-items: center;
 }
 
 .manage-passwords-button {
   padding: 0.5rem 1rem;
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.3s;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .manage-passwords-button:hover {
-  background-color: #005fa3;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 /* Modal styles */
@@ -173,57 +271,92 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal-content {
   background: white;
-  border-radius: 8px;
-  max-width: 600px;
+  border-radius: 16px;
+  max-width: 650px;
   width: 90%;
-  max-height: 80vh;
+  max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-color);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+
+.modal-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+  border-radius: 16px 16px 0 0;
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #dee2e6;
+  padding: 2rem 2rem 1rem 2rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h2 {
-  margin: 0;
-  color: var(--primary-color);
+  color: var(--text-color);
+  font-size: 1.5rem;
+  font-weight: 600;
 }
 
 .modal-close {
   background: none;
   border: none;
-  font-size: 2rem;
+  font-size: 1.5rem;
   cursor: pointer;
-  color: #666;
-  line-height: 1;
-  padding: 0;
-  width: 30px;
-  height: 30px;
+  color: var(--text-light);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .modal-close:hover {
-  color: var(--danger-color);
+  background: var(--secondary-color);
+  color: var(--text-color);
+  transform: scale(1.1);
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 2rem;
 }
 
 .create-password-section {
@@ -231,8 +364,10 @@
 }
 
 .create-password-section h3 {
-  margin-bottom: 1rem;
   color: var(--text-color);
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  font-weight: 600;
 }
 
 .create-password-form {
@@ -243,50 +378,65 @@
 
 .new-password-input,
 .expiration-input {
-  padding: 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
   font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
 }
 
 .new-password-input:focus,
 .expiration-input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.25);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  transform: translateY(-1px);
 }
 
 .create-password-button {
   padding: 0.75rem 1.5rem;
-  background-color: var(--success-color);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 1rem;
-  transition: background-color 0.3s;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-md);
 }
 
 .create-password-button:hover {
-  background-color: #218838;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .password-error {
   color: var(--danger-color);
   font-size: 0.9rem;
-  margin-bottom: 1rem;
+  font-weight: 500;
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .existing-passwords-section h3 {
-  margin-bottom: 1rem;
   color: var(--text-color);
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  font-weight: 600;
 }
 
 .no-passwords {
-  color: #666;
+  color: var(--text-light);
   font-style: italic;
   text-align: center;
   padding: 2rem;
+  background: var(--secondary-color);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
 }
 
 .passwords-list {
@@ -299,62 +449,86 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  background-color: #f8f9fa;
+  padding: 1.25rem;
+  background: var(--secondary-color);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.password-item:hover {
+  background: #f1f5f9;
+  border-color: var(--primary-light);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .password-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  flex: 1;
 }
 
 .password-text {
-  font-weight: bold;
-  font-family: monospace;
-  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
 }
 
 .password-expiry {
-  color: #666;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  color: var(--text-light);
+  font-weight: 500;
 }
 
 .password-created {
-  color: #999;
   font-size: 0.8rem;
+  color: var(--text-light);
 }
 
 .delete-password-button {
   padding: 0.5rem 1rem;
-  background-color: var(--danger-color);
+  background: linear-gradient(135deg, var(--danger-color) 0%, #ef4444 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.3s;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .delete-password-button:hover {
-  background-color: #c82333;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 @media (max-width: 768px) {
   .create-password-form {
     gap: 0.75rem;
   }
-  
+
   .password-item {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 1rem;
   }
-  
+
   .delete-password-button {
-    align-self: center;
+    align-self: stretch;
+    text-align: center;
+  }
+  
+  .modal-body {
+    padding: 1.5rem;
+  }
+  
+  .modal-header {
+    padding: 1.5rem 1.5rem 1rem 1.5rem;
   }
 } 

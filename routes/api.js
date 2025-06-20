@@ -5,6 +5,7 @@ const db = require('../db');
 // Get configuration from environment variables, with defaults
 const TANK_HEIGHT_CM = parseInt(process.env.TANK_HEIGHT_CM || '100', 10);
 const REFRESH_INTERVAL_MS = parseInt(process.env.REFRESH_INTERVAL_MS || '5000', 10);
+const MAX_HISTORY_MINUTES_AGO = parseInt(process.env.MAX_HISTORY_MINUTES_AGO || '60', 10);
 
 // Middleware to validate ESP32 API key
 const validateApiKey = (req, res, next) => {
@@ -143,7 +144,8 @@ router.get('/latest', asyncHandler(async (req, res) => {
       pump_on: false,
       auto_mode: true,
       tank_height_cm: TANK_HEIGHT_CM,
-      refresh_interval_ms: REFRESH_INTERVAL_MS
+      refresh_interval_ms: REFRESH_INTERVAL_MS,
+      max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO
     });
   }
   
@@ -153,7 +155,8 @@ router.get('/latest', asyncHandler(async (req, res) => {
     pump_on: pumpRows[0].is_on,
     auto_mode: pumpRows[0].auto_mode,
     tank_height_cm: TANK_HEIGHT_CM,
-    refresh_interval_ms: REFRESH_INTERVAL_MS
+    refresh_interval_ms: REFRESH_INTERVAL_MS,
+    max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO
   });
 }));
 
@@ -171,7 +174,9 @@ router.get('/history', asyncHandler(async (req, res) => {
   // Return data in chronological order (oldest first)
   res.json({
     history: rows.reverse(),
-    tank_height_cm: TANK_HEIGHT_CM
+    tank_height_cm: TANK_HEIGHT_CM,
+    max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO,
+    refresh_interval_ms: REFRESH_INTERVAL_MS
   });
 }));
 

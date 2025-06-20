@@ -11,7 +11,8 @@ function App() {
     pump_on: false,
     auto_mode: true,
     tank_height_cm: 100, // Default value, will be updated from API
-    refresh_interval_ms: 5000 // Default value, will be updated from API
+    refresh_interval_ms: 5000, // Default value, will be updated from API
+    max_history_minutes_ago: 60 // Default value, will be updated from API
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -237,7 +238,10 @@ function App() {
         <>
           <div className="dashboard">
             <div className="card">
-              <h2 className="card-title">Water Level</h2>
+              <h2 className="card-title">
+                <span className="icon-water">💧</span>
+                Water Level
+              </h2>
               <div className="tank-container">
                 <div className="tank">
                   <div 
@@ -273,7 +277,10 @@ function App() {
             </div>
 
             <div className="card">
-              <h2 className="card-title">Pump Control</h2>
+              <h2 className="card-title">
+                <span className="icon-pump">⚙️</span>
+                Pump Control
+              </h2>
               
               {!isAuthenticated && (
                 <div className="auth-section">
@@ -336,15 +343,16 @@ function App() {
                     checked={data.auto_mode}
                     onChange={toggleAutoMode}
                     disabled={!isAuthenticated}
-                    onColor="#86d3ff"
-                    onHandleColor="#2693e6"
-                    handleDiameter={30}
+                    onColor="#3b82f6"
+                    onHandleColor="#ffffff"
+                    handleDiameter={28}
                     uncheckedIcon={false}
                     checkedIcon={false}
-                    boxShadow="0px 1px 5px rgba(0, 0, 0, 0.6)"
-                    activeBoxShadow="0px 0px 1px 10px rgba(0, 0, 0, 0.2)"
-                    height={20}
-                    width={48}
+                    boxShadow="0px 2px 4px rgba(0, 0, 0, 0.1)"
+                    activeBoxShadow="0px 0px 0px 3px rgba(59, 130, 246, 0.2)"
+                    height={22}
+                    width={50}
+                    className="custom-switch"
                   />
                 </div>
                 
@@ -354,15 +362,16 @@ function App() {
                     checked={data.pump_on}
                     onChange={togglePump}
                     disabled={data.auto_mode || !isAuthenticated}
-                    onColor="#86d3ff"
-                    onHandleColor="#2693e6"
-                    handleDiameter={30}
+                    onColor="#3b82f6"
+                    onHandleColor="#ffffff"
+                    handleDiameter={28}
                     uncheckedIcon={false}
                     checkedIcon={false}
-                    boxShadow="0px 1px 5px rgba(0, 0, 0, 0.6)"
-                    activeBoxShadow="0px 0px 1px 10px rgba(0, 0, 0, 0.2)"
-                    height={20}
-                    width={48}
+                    boxShadow="0px 2px 4px rgba(0, 0, 0, 0.1)"
+                    activeBoxShadow="0px 0px 0px 3px rgba(59, 130, 246, 0.2)"
+                    height={22}
+                    width={50}
+                    className="custom-switch"
                   />
                 </div>
                 
@@ -381,8 +390,14 @@ function App() {
 
           {showHistory && (
             <div className="card history-card">
-              <h2 className="card-title">Water Level History</h2>
-              <WaterLevelChart tankHeight={data.tank_height_cm} />
+              <h2 className="card-title">
+                <span className="icon-chart">📊</span>
+                Water Level History
+              </h2>
+                              <WaterLevelChart 
+                  tankHeight={data.tank_height_cm} 
+                  maxHistoryMinutesAgo={data.max_history_minutes_ago}
+                />
             </div>
           )}
         </>
