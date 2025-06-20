@@ -23,7 +23,7 @@ ChartJS.register(
   Legend
 );
 
-const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshIntervalMs = 5000 }) => {Y
+const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshIntervalMs = 5000 }) => {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
