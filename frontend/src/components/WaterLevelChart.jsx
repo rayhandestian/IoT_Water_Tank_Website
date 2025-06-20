@@ -23,6 +23,40 @@ ChartJS.register(
   Legend
 );
 
+// Hook to detect mobile screen size
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(() => {
+    // Initialize with current window size to prevent hydration mismatch
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      const newIsMobile = window.innerWidth <= 768;
+      setIsMobile(prev => {
+        // Only update if the value actually changed to prevent unnecessary re-renders
+        return prev !== newIsMobile ? newIsMobile : prev;
+      });
+    };
+    
+    // Debounce resize events to prevent excessive re-renders
+    let timeoutId;
+    const debouncedCheckMobile = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(checkMobile, 100);
+    };
+    
+    window.addEventListener('resize', debouncedCheckMobile);
+    
+    return () => {
+      window.removeEventListener('resize', debouncedCheckMobile);
+      clearTimeout(timeoutId);
+    };
+  }, []);
+  
+  return isMobile;
+};
+
 const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshIntervalMs = 5000 }) => {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +64,9 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
   const [retryCount, setRetryCount] = useState(0);
   const [lastFetchTime, setLastFetchTime] = useState(null);
   const [dataStats, setDataStats] = useState({});
+  
+  // Mobile detection
+  const isMobile = useIsMobile();
   
   // Use refs to prevent unnecessary re-renders
   const intervalRef = useRef(null);
@@ -75,7 +112,7 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
       const response = await axios.get('/api/history', {
         params: {
           minutes_ago: maxHistoryMinutesAgo,
-          max_points: 50 // Limit data points for better performance
+          max_points: isMobile ? 30 : 50 // Reduce data points on mobile for better performance
         },
         signal: abortControllerRef.current.signal
       });
@@ -115,7 +152,7 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
     } finally {
       setLoading(false);
     }
-  }, [maxHistoryMinutesAgo, retryCount]);
+  }, [maxHistoryMinutesAgo, retryCount, isMobile]);
 
   // Manual retry function
   const handleRetry = useCallback(() => {
@@ -156,21 +193,36 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
     };
   }, [fetchHistoryData, refreshInterval]);
 
-  // Format timestamp for display (fixed timestamps, not relative)
+  // Format timestamp for display (mobile-friendly)
   const formatTimestamp = useCallback((timestamp) => {
     const date = new Date(timestamp);
+    if (isMobile) {
+      // Shorter format for mobile
+      return date.toLocaleTimeString(undefined, { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    }
     return date.toLocaleTimeString(undefined, { 
       hour: '2-digit', 
       minute: '2-digit',
       second: '2-digit'
     });
-  }, []);
+  }, [isMobile]);
 
   // Format tooltip timestamp
   const formatTooltipTimestamp = useCallback((timestamp) => {
     const date = new Date(timestamp);
+    if (isMobile) {
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
     return date.toLocaleString();
-  }, []);
+  }, [isMobile]);
 
   // Memoized chart data
   const chartData = useMemo(() => {
@@ -185,22 +237,22 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
           fill: true,
           backgroundColor: createGradient,
           borderColor: '#2563eb',
-          borderWidth: 3,
+          borderWidth: isMobile ? 2 : 3,
           tension: 0.4,
-          pointRadius: 3,
-          pointHoverRadius: 6,
+          pointRadius: isMobile ? 2 : 3,
+          pointHoverRadius: isMobile ? 4 : 6,
           pointBackgroundColor: '#ffffff',
           pointBorderColor: '#2563eb',
-          pointBorderWidth: 2,
+          pointBorderWidth: isMobile ? 1 : 2,
           pointHoverBackgroundColor: '#2563eb',
           pointHoverBorderColor: '#ffffff',
-          pointHoverBorderWidth: 3,
+          pointHoverBorderWidth: isMobile ? 2 : 3,
         }
       ]
     };
-  }, [historyData, formatTimestamp, createGradient]);
+  }, [historyData, formatTimestamp, createGradient, isMobile]);
 
-  // Memoized chart options
+  // Memoized chart options with mobile responsiveness
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -209,7 +261,7 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
       mode: 'index',
     },
     animation: {
-      duration: 750,
+      duration: isMobile ? 500 : 750,
       easing: 'easeInOutQuart'
     },
     scales: {
@@ -217,10 +269,10 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
         beginAtZero: true,
         max: Math.ceil(tankHeight * 1.1),
         title: {
-          display: true,
+          display: !isMobile, // Hide title on mobile to save space
           text: 'Water Level (cm)',
           font: {
-            size: 14,
+            size: isMobile ? 10 : 14,
             weight: 600,
           },
           color: '#1e293b',
@@ -228,20 +280,23 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
         grid: {
           color: 'rgba(148, 163, 184, 0.1)',
           borderColor: '#e2e8f0',
+          lineWidth: isMobile ? 0.5 : 1,
         },
         ticks: {
           color: '#64748b',
           font: {
-            size: 12,
+            size: isMobile ? 10 : 12,
           },
+          maxTicksLimit: isMobile ? 5 : 8,
+          padding: isMobile ? 4 : 8,
         },
       },
       x: {
         title: {
-          display: true,
+          display: !isMobile, // Hide title on mobile to save space
           text: `Time (Last ${maxHistoryMinutesAgo} minutes)`,
           font: {
-            size: 14,
+            size: isMobile ? 10 : 14,
             weight: 600,
           },
           color: '#1e293b',
@@ -249,28 +304,32 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
         grid: {
           color: 'rgba(148, 163, 184, 0.1)',
           borderColor: '#e2e8f0',
+          lineWidth: isMobile ? 0.5 : 1,
         },
         ticks: {
           color: '#64748b',
           font: {
-            size: 12,
+            size: isMobile ? 9 : 12,
           },
-          maxTicksLimit: 8,
+          maxTicksLimit: isMobile ? 4 : 8,
+          maxRotation: isMobile ? 45 : 0,
+          padding: isMobile ? 2 : 8,
         },
       }
     },
     plugins: {
       legend: {
-        display: true,
+        display: !isMobile, // Hide legend on mobile to save space
         position: 'top',
         labels: {
           font: {
-            size: 14,
+            size: isMobile ? 12 : 14,
             weight: 500,
           },
           color: '#1e293b',
           usePointStyle: true,
           pointStyle: 'circle',
+          padding: isMobile ? 10 : 20,
         },
       },
       title: {
@@ -282,22 +341,28 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
         bodyColor: '#64748b',
         borderColor: '#e2e8f0',
         borderWidth: 1,
-        cornerRadius: 8,
-        displayColors: true,
+        cornerRadius: isMobile ? 6 : 8,
+        displayColors: !isMobile, // Hide color box on mobile
         titleFont: {
-          size: 14,
+          size: isMobile ? 12 : 14,
           weight: 600,
         },
         bodyFont: {
-          size: 13,
+          size: isMobile ? 11 : 13,
         },
-        padding: 12,
-        boxPadding: 6,
+        padding: isMobile ? 8 : 12,
+        boxPadding: isMobile ? 4 : 6,
+        caretSize: isMobile ? 4 : 6,
         callbacks: {
           title: function(context) {
             const dataIndex = context[0].dataIndex;
             const originalTimestamp = historyData[dataIndex].timestamp;
             return formatTooltipTimestamp(originalTimestamp);
+          },
+          label: function(context) {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value.toFixed(1)} cm`;
           }
         }
       },
@@ -307,10 +372,12 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
         borderJoinStyle: 'round',
       },
       point: {
-        hoverBorderWidth: 3,
+        hoverBorderWidth: isMobile ? 2 : 3,
       },
     },
-  }), [tankHeight, maxHistoryMinutesAgo, historyData, formatTooltipTimestamp]);
+    // Mobile-specific optimizations
+    devicePixelRatio: isMobile ? 1 : undefined, // Reduce pixel ratio on mobile for better performance
+  }), [tankHeight, maxHistoryMinutesAgo, historyData, formatTooltipTimestamp, isMobile]);
 
   // Render loading state
   if (loading && !historyData.length) {
@@ -365,13 +432,16 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
             {dataStats.filteredPoints || historyData.length} data points
             {dataStats.totalPoints && dataStats.totalPoints > dataStats.filteredPoints && (
               <span className="reduced-notice">
-                (reduced from {dataStats.totalPoints})
+                {isMobile ? `(${dataStats.totalPoints} total)` : `(reduced from ${dataStats.totalPoints})`}
               </span>
             )}
           </span>
           {lastFetchTime && (
             <span className="last-update">
-              Last updated: {lastFetchTime.toLocaleTimeString()}
+              {isMobile ? 'Updated: ' : 'Last updated: '}{lastFetchTime.toLocaleTimeString(undefined, {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </span>
           )}
         </div>
@@ -385,7 +455,7 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
           </div>
         )}
         
-        {loading && historyData.length > 0 && (
+        {loading && historyData.length > 0 && !isMobile && (
           <div className="chart-refreshing">
             <div className="refreshing-spinner"></div>
             <span>Refreshing...</span>
@@ -395,7 +465,11 @@ const WaterLevelChart = ({ tankHeight, maxHistoryMinutesAgo = 60, refreshInterva
 
       {/* Chart */}
       <div className="chart-wrapper">
-        <Line data={chartData} options={chartOptions} height={300} />
+        <Line 
+          data={chartData} 
+          options={chartOptions} 
+          height={isMobile ? 250 : 300}
+        />
       </div>
     </div>
   );
