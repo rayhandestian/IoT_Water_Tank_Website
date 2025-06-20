@@ -25,6 +25,17 @@ const createTables = async () => {
       )
     `);
 
+    // Create temporary_passwords table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS temporary_passwords (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        password VARCHAR(255) NOT NULL,
+        expires_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_by VARCHAR(100) DEFAULT 'admin'
+      )
+    `);
+
     // Check if pump_status has data, if not seed with default values
     const [rows] = await connection.query('SELECT COUNT(*) as count FROM pump_status');
     if (rows[0].count === 0) {
@@ -151,7 +162,8 @@ const createMockPool = () => {
       is_on: false,
       auto_mode: true,
       timestamp: new Date()
-    }]
+    }],
+    temporary_passwords: []
   };
   
   return {
@@ -193,6 +205,52 @@ const createMockPool = () => {
       
       if (sql.includes('SELECT') && sql.includes('pump_status')) {
         return [mockData.pump_status.slice(-1)];
+      }
+      
+      if (sql.includes('INSERT INTO temporary_passwords')) {
+        const password = params[0];
+        const expiresAt = params[1];
+        const newRecord = {
+          id: mockData.temporary_passwords.length + 1,
+          password,
+          expires_at: expiresAt,
+          created_at: new Date(),
+          created_by: 'admin'
+        };
+        mockData.temporary_passwords.push(newRecord);
+        return [{ insertId: newRecord.id }];
+      }
+      
+      if (sql.includes('SELECT') && sql.includes('temporary_passwords')) {
+        if (sql.includes('WHERE password = ?')) {
+          const password = params[0];
+          return [mockData.temporary_passwords.filter(p => p.password === password)];
+        }
+        return [mockData.temporary_passwords];
+      }
+      
+      if (sql.includes('DELETE FROM temporary_passwords')) {
+        if (sql.includes('WHERE id = ?')) {
+          const id = params[0];
+          const index = mockData.temporary_passwords.findIndex(p => p.id === id);
+          if (index !== -1) {
+            mockData.temporary_passwords.splice(index, 1);
+            return [{ affectedRows: 1 }];
+          }
+          return [{ affectedRows: 0 }];
+        }
+        if (sql.includes('WHERE id IN (?)')) {
+          const ids = params[0];
+          let affected = 0;
+          ids.forEach(id => {
+            const index = mockData.temporary_passwords.findIndex(p => p.id === id);
+            if (index !== -1) {
+              mockData.temporary_passwords.splice(index, 1);
+              affected++;
+            }
+          });
+          return [{ affectedRows: affected }];
+        }
       }
       
       return [[]];

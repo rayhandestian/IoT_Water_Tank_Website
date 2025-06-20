@@ -16,6 +16,15 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isMainPassword, setIsMainPassword] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [showPasswordManager, setShowPasswordManager] = useState(false);
+  const [tempPasswords, setTempPasswords] = useState([]);
+  const [newPassword, setNewPassword] = useState('');
+  const [expirationMinutes, setExpirationMinutes] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   // Fetch latest data from the API
   const fetchData = async () => {
@@ -31,14 +40,47 @@ function App() {
     }
   };
 
+  // Validate password
+  const validatePassword = async () => {
+    if (!password.trim()) {
+      setAuthError('Please enter a password');
+      return;
+    }
+    
+    try {
+      const response = await axios.post('/api/validate-password', { password });
+      if (response.data.valid) {
+        setIsAuthenticated(true);
+        setIsMainPassword(response.data.isMainPassword || false);
+        setAuthError('');
+      } else {
+        setAuthError('Invalid password');
+        setPassword('');
+      }
+    } catch (err) {
+      console.error('Error validating password:', err);
+      setAuthError('Failed to validate password. Please try again.');
+    }
+  };
+
   // Toggle pump status
   const togglePump = async (checked) => {
+    if (!isAuthenticated) {
+      setError('Please authenticate first to control the pump.');
+      return;
+    }
+
     try {
-      await axios.post('/api/pump', { is_on: checked });
+      await axios.post('/api/pump', { is_on: checked, password });
       setData(prev => ({ ...prev, pump_on: checked }));
     } catch (err) {
       console.error('Error toggling pump:', err);
-      setError('Failed to toggle pump. Please try again.');
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please re-enter your password.');
+        setIsAuthenticated(false);
+      } else {
+        setError('Failed to toggle pump. Please try again.');
+      }
       // Revert UI state on error
       fetchData();
     }
@@ -46,14 +88,106 @@ function App() {
 
   // Toggle auto mode
   const toggleAutoMode = async (checked) => {
+    if (!isAuthenticated) {
+      setError('Please authenticate first to control the pump.');
+      return;
+    }
+
     try {
-      await axios.post('/api/auto', { auto_mode: checked });
+      await axios.post('/api/auto', { auto_mode: checked, password });
       setData(prev => ({ ...prev, auto_mode: checked }));
     } catch (err) {
       console.error('Error toggling auto mode:', err);
-      setError('Failed to toggle auto mode. Please try again.');
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please re-enter your password.');
+        setIsAuthenticated(false);
+      } else {
+        setError('Failed to toggle auto mode. Please try again.');
+      }
       // Revert UI state on error
       fetchData();
+    }
+  };
+
+  // Handle password input keypress
+  const handlePasswordKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      validatePassword();
+    }
+  };
+
+  // Fetch temporary passwords
+  const fetchTempPasswords = async () => {
+    if (!isMainPassword) return;
+    
+    try {
+      const response = await axios.post('/api/temp-passwords/list', {
+        password: password
+      });
+      setTempPasswords(response.data.passwords);
+    } catch (err) {
+      console.error('Error fetching temporary passwords:', err);
+      setError('Failed to fetch temporary passwords.');
+    }
+  };
+
+  // Create temporary password
+  const createTempPassword = async () => {
+    if (!newPassword.trim()) {
+      setPasswordError('Please enter a password');
+      return;
+    }
+
+    if (newPassword.length < 3) {
+      setPasswordError('Password must be at least 3 characters long');
+      return;
+    }
+
+    try {
+      await axios.post('/api/temp-passwords', {
+        password: password, // Main password for auth
+        newPassword: newPassword, // The new temporary password
+        expirationMinutes: expirationMinutes ? parseInt(expirationMinutes) : null
+      });
+      
+      setNewPassword('');
+      setExpirationMinutes('');
+      setPasswordError('');
+      fetchTempPasswords();
+    } catch (err) {
+      console.error('Error creating temporary password:', err);
+      setPasswordError(err.response?.data?.error || 'Failed to create password');
+    }
+  };
+
+  // Delete temporary password
+  const deleteTempPassword = async (id) => {
+    try {
+      await axios.delete(`/api/temp-passwords/${id}`, {
+        data: { password }
+      });
+      fetchTempPasswords();
+    } catch (err) {
+      console.error('Error deleting temporary password:', err);
+      setError('Failed to delete password.');
+    }
+  };
+
+  // Format expiration time
+  const formatExpiration = (expiresAt) => {
+    if (!expiresAt) return 'Permanent';
+    const expiration = new Date(expiresAt);
+    const now = new Date();
+    if (expiration <= now) return 'Expired';
+    
+    const diffMs = expiration - now;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+    
+    if (diffHours > 0) {
+      return `${diffHours}h ${diffMins % 60}m remaining`;
+    } else {
+      return `${diffMins}m remaining`;
     }
   };
 
@@ -139,13 +273,69 @@ function App() {
             </div>
 
             <div className="card">
-              <h2 className="card-title">Pump Controls</h2>
+              <h2 className="card-title">Pump Control</h2>
+              
+              {!isAuthenticated && (
+                <div className="auth-section">
+                  <div className="password-input-container">
+                    <input
+                      type="password"
+                      placeholder="Enter password to control pump"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyPress={handlePasswordKeyPress}
+                      className="password-input"
+                    />
+                    <button 
+                      onClick={validatePassword}
+                      className="auth-button"
+                    >
+                      Authenticate
+                    </button>
+                  </div>
+                  {authError && (
+                    <div className="auth-error">
+                      {authError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {isAuthenticated && (
+                <div className="authenticated-indicator">
+                  <div className="indicator-dot status-on"></div>
+                  <span>Authenticated - Controls Enabled</span>
+                  <div className="auth-buttons">
+                    {isMainPassword && (
+                      <button 
+                        onClick={() => { setShowPasswordManager(true); fetchTempPasswords(); }}
+                        className="manage-passwords-button"
+                      >
+                        Manage Passwords
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => { 
+                        setIsAuthenticated(false); 
+                        setIsMainPassword(false); 
+                        setPassword(''); 
+                        setShowPasswordManager(false);
+                      }}
+                      className="logout-button"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="controls">
                 <div className="control-item">
                   <span className="switch-label">Auto Mode</span>
                   <Switch
                     checked={data.auto_mode}
                     onChange={toggleAutoMode}
+                    disabled={!isAuthenticated}
                     onColor="#86d3ff"
                     onHandleColor="#2693e6"
                     handleDiameter={30}
@@ -163,7 +353,7 @@ function App() {
                   <Switch
                     checked={data.pump_on}
                     onChange={togglePump}
-                    disabled={data.auto_mode}
+                    disabled={data.auto_mode || !isAuthenticated}
                     onColor="#86d3ff"
                     onHandleColor="#2693e6"
                     handleDiameter={30}
@@ -196,6 +386,84 @@ function App() {
             </div>
           )}
         </>
+      )}
+
+      {/* Password Manager Modal */}
+      {showPasswordManager && (
+        <div className="modal-overlay" onClick={() => setShowPasswordManager(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Manage Temporary Passwords</h2>
+              <button 
+                className="modal-close"
+                onClick={() => setShowPasswordManager(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="create-password-section">
+                <h3>Create New Password</h3>
+                {passwordError && (
+                  <div className="password-error">
+                    {passwordError}
+                  </div>
+                )}
+                <div className="create-password-form">
+                  <input
+                    type="text"
+                    placeholder="New password (min 3 characters)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="new-password-input"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Minutes to expire (blank = permanent)"
+                    value={expirationMinutes}
+                    onChange={(e) => setExpirationMinutes(e.target.value)}
+                    className="expiration-input"
+                    min="1"
+                  />
+                  <button 
+                    onClick={createTempPassword}
+                    className="create-password-button"
+                  >
+                    Create Password
+                  </button>
+                </div>
+              </div>
+
+              <div className="existing-passwords-section">
+                <h3>Existing Temporary Passwords</h3>
+                {tempPasswords.length === 0 ? (
+                  <p className="no-passwords">No temporary passwords created yet.</p>
+                ) : (
+                  <div className="passwords-list">
+                    {tempPasswords.map((pwd) => (
+                      <div key={pwd.id} className="password-item">
+                        <div className="password-info">
+                          <span className="password-text">{pwd.password}</span>
+                          <span className="password-expiry">{formatExpiration(pwd.expires_at)}</span>
+                          <span className="password-created">
+                            Created: {new Date(pwd.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => deleteTempPassword(pwd.id)}
+                          className="delete-password-button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
