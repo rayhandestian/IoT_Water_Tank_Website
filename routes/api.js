@@ -114,6 +114,28 @@ router.post('/data', validateApiKey, asyncHandler(async (req, res) => {
   });
 }));
 
+// POST /api/encrypted-data - Receive encrypted sensor data from ESP32
+router.post('/encrypted-data', validateApiKey, asyncHandler(async (req, res) => {
+  const { encrypted_level } = req.body;
+  
+  if (!encrypted_level || typeof encrypted_level !== 'string') {
+    return res.status(400).json({ error: 'Invalid data: encrypted_level is required and must be a string' });
+  }
+  
+  // Insert encrypted sensor data
+  const pool = db.getPool();
+  await pool.query('INSERT INTO encrypted_sensor_data (encrypted_level) VALUES (?)', [encrypted_level]);
+  
+  // Get current pump status
+  const [rows] = await pool.query('SELECT is_on, auto_mode FROM pump_status ORDER BY id DESC LIMIT 1');
+  const { is_on, auto_mode } = rows[0];
+  
+  res.json({
+    pump_on: is_on,
+    auto_mode: auto_mode
+  });
+}));
+
 // GET /api/status - ESP32 polling for pump status
 router.get('/status', validateApiKey, asyncHandler(async (req, res) => {
   const pool = db.getPool();
@@ -129,9 +151,16 @@ router.get('/status', validateApiKey, asyncHandler(async (req, res) => {
 // GET /api/latest - Get latest sensor data and pump status
 router.get('/latest', asyncHandler(async (req, res) => {
   const pool = db.getPool();
+  const encrypted = req.query.encrypted === 'true';
   
-  // Get latest sensor data
-  const [sensorRows] = await pool.query('SELECT level_cm, timestamp FROM sensor_data ORDER BY id DESC LIMIT 1');
+  let sensorRows;
+  if (encrypted) {
+    // Get latest encrypted sensor data
+    [sensorRows] = await pool.query('SELECT encrypted_level, timestamp FROM encrypted_sensor_data ORDER BY id DESC LIMIT 1');
+  } else {
+    // Get latest regular sensor data
+    [sensorRows] = await pool.query('SELECT level_cm, timestamp FROM sensor_data ORDER BY id DESC LIMIT 1');
+  }
   
   // Get latest pump status
   const [pumpRows] = await pool.query('SELECT is_on, auto_mode FROM pump_status ORDER BY id DESC LIMIT 1');
@@ -139,25 +168,37 @@ router.get('/latest', asyncHandler(async (req, res) => {
   // If no data yet, return default values
   if (sensorRows.length === 0) {
     return res.json({
-      level_cm: 0,
+      level_cm: encrypted ? null : 0,
+      encrypted_level: encrypted ? "0000000000" : null,
       timestamp: new Date(),
       pump_on: false,
       auto_mode: true,
       tank_height_cm: TANK_HEIGHT_CM,
       refresh_interval_ms: REFRESH_INTERVAL_MS,
-      max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO
+      max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO,
+      encrypted_mode: encrypted
     });
   }
   
-  res.json({
-    level_cm: sensorRows[0].level_cm,
+  const response = {
     timestamp: sensorRows[0].timestamp,
     pump_on: pumpRows[0].is_on,
     auto_mode: pumpRows[0].auto_mode,
     tank_height_cm: TANK_HEIGHT_CM,
     refresh_interval_ms: REFRESH_INTERVAL_MS,
-    max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO
-  });
+    max_history_minutes_ago: MAX_HISTORY_MINUTES_AGO,
+    encrypted_mode: encrypted
+  };
+  
+  if (encrypted) {
+    response.encrypted_level = sensorRows[0].encrypted_level;
+    response.level_cm = null;
+  } else {
+    response.level_cm = sensorRows[0].level_cm;
+    response.encrypted_level = null;
+  }
+  
+  res.json(response);
 }));
 
 // GET /api/history - Get historical sensor data with time-based filtering
@@ -165,19 +206,33 @@ router.get('/history', asyncHandler(async (req, res) => {
   const pool = db.getPool();
   const minutesAgo = parseInt(req.query.minutes_ago || MAX_HISTORY_MINUTES_AGO.toString(), 10);
   const maxDataPoints = parseInt(req.query.max_points || '100', 10);
+  const encrypted = req.query.encrypted === 'true';
   
   // Calculate cutoff time
   const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
   
-  // Get historical data within time range
-  const [rows] = await pool.query(
-    `SELECT level_cm, timestamp 
-     FROM sensor_data 
-     WHERE timestamp >= ? 
-     ORDER BY timestamp DESC 
-     LIMIT ?`, 
-    [cutoffTime, Math.min(maxDataPoints, 200)] // Cap at 200 entries
-  );
+  let rows;
+  if (encrypted) {
+    // Get encrypted historical data within time range
+    [rows] = await pool.query(
+      `SELECT encrypted_level, timestamp 
+       FROM encrypted_sensor_data 
+       WHERE timestamp >= ? 
+       ORDER BY timestamp DESC 
+       LIMIT ?`, 
+      [cutoffTime, Math.min(maxDataPoints, 200)] // Cap at 200 entries
+    );
+  } else {
+    // Get regular historical data within time range
+    [rows] = await pool.query(
+      `SELECT level_cm, timestamp 
+       FROM sensor_data 
+       WHERE timestamp >= ? 
+       ORDER BY timestamp DESC 
+       LIMIT ?`, 
+      [cutoffTime, Math.min(maxDataPoints, 200)] // Cap at 200 entries
+    );
+  }
   
   // For dense data, reduce points to improve performance
   let processedData = rows.reverse(); // Chronological order
@@ -200,7 +255,8 @@ router.get('/history', asyncHandler(async (req, res) => {
     refresh_interval_ms: REFRESH_INTERVAL_MS,
     total_points: rows.length,
     filtered_points: processedData.length,
-    time_range_minutes: minutesAgo
+    time_range_minutes: minutesAgo,
+    encrypted_mode: encrypted
   });
 }));
 

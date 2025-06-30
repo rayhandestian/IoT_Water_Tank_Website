@@ -15,6 +15,15 @@ const createTables = async () => {
       )
     `);
 
+    // Create encrypted_sensor_data table for encrypted mode
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS encrypted_sensor_data (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        encrypted_level VARCHAR(255) NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create pump_status table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS pump_status (
@@ -157,6 +166,18 @@ const createMockPool = () => {
         timestamp: new Date()
       }
     ],
+    encrypted_sensor_data: [
+      {
+        id: 1,
+        encrypted_level: "4D5E2F1A3B",
+        timestamp: new Date(Date.now() - 86400000)
+      },
+      {
+        id: 2,
+        encrypted_level: "4A5B2E193C",
+        timestamp: new Date(Date.now() - 72000000)
+      }
+    ],
     pump_status: [{
       id: 1,
       is_on: false,
@@ -181,6 +202,17 @@ const createMockPool = () => {
         return [{ insertId: newRecord.id }];
       }
       
+      if (sql.includes('INSERT INTO encrypted_sensor_data')) {
+        const encrypted_level = params[0];
+        const newRecord = {
+          id: mockData.encrypted_sensor_data.length + 1,
+          encrypted_level,
+          timestamp: new Date()
+        };
+        mockData.encrypted_sensor_data.push(newRecord);
+        return [{ insertId: newRecord.id }];
+      }
+      
       if (sql.includes('INSERT INTO pump_status')) {
         const is_on = params[0];
         const auto_mode = params[1] !== undefined ? params[1] : mockData.pump_status[0].auto_mode;
@@ -198,9 +230,18 @@ const createMockPool = () => {
         return [mockData.sensor_data.slice(-1)];
       }
       
+      if (sql.includes('SELECT') && sql.includes('encrypted_sensor_data') && sql.includes('ORDER BY id DESC LIMIT 1')) {
+        return [mockData.encrypted_sensor_data.slice(-1)];
+      }
+      
       if (sql.includes('SELECT') && sql.includes('sensor_data') && sql.includes('ORDER BY timestamp DESC LIMIT')) {
         const limit = params[0] || 24;
         return [mockData.sensor_data.slice(-limit).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))];
+      }
+      
+      if (sql.includes('SELECT') && sql.includes('encrypted_sensor_data') && sql.includes('ORDER BY timestamp DESC LIMIT')) {
+        const limit = params[0] || 24;
+        return [mockData.encrypted_sensor_data.slice(-limit).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))];
       }
       
       if (sql.includes('SELECT') && sql.includes('pump_status')) {

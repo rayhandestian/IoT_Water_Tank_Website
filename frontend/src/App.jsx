@@ -3,6 +3,7 @@ import axios from 'axios';
 import Switch from 'react-switch';
 import './App.css';
 import WaterLevelChart from './components/WaterLevelChart';
+import { decryptWaterLevel, getAlgorithmInfo, testAlgorithms } from './utils/crypto';
 
 function App() {
   const [data, setData] = useState({
@@ -12,7 +13,9 @@ function App() {
     auto_mode: true,
     tank_height_cm: 100, // Default value, will be updated from API
     refresh_interval_ms: 5000, // Default value, will be updated from API
-    max_history_minutes_ago: 60 // Default value, will be updated from API
+    max_history_minutes_ago: 60, // Default value, will be updated from API
+    encrypted_mode: false,
+    encrypted_level: null
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,13 +29,91 @@ function App() {
   const [newPassword, setNewPassword] = useState('');
   const [expirationMinutes, setExpirationMinutes] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  
+  // Encrypted mode states
+  const [encryptedMode, setEncryptedMode] = useState(false);
+  const [decryptionKey, setDecryptionKey] = useState('');
+  const [showDecryptionKey, setShowDecryptionKey] = useState(false);
+  const [decryptedLevel, setDecryptedLevel] = useState(null);
+  const [decryptionError, setDecryptionError] = useState('');
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState('AUTO');
+  const [detectedAlgorithm, setDetectedAlgorithm] = useState('');
+  const [showAlgorithmTest, setShowAlgorithmTest] = useState(false);
+
+  // Unified decryption function using crypto utilities
+  const performDecryption = (encryptedHex, key, algorithm = 'AUTO') => {
+    const result = decryptWaterLevel(encryptedHex, key, algorithm);
+    
+    if (result.success) {
+      setDetectedAlgorithm(result.algorithm);
+      return result.value;
+    } else {
+      setDetectedAlgorithm('');
+      return null;
+    }
+  };
+
+  // Handle decryption key changes
+  const handleDecryptionKeyChange = (key) => {
+    setDecryptionKey(key);
+    setDecryptionError('');
+    
+    if (key && data.encrypted_level) {
+      const decrypted = performDecryption(data.encrypted_level, key, selectedAlgorithm);
+      if (decrypted !== null) {
+        setDecryptedLevel(decrypted);
+        setDecryptionError('');
+      } else {
+        setDecryptedLevel(null);
+        setDecryptionError('Invalid decryption key, corrupted data, or wrong algorithm');
+      }
+    } else {
+      setDecryptedLevel(null);
+    }
+  };
+
+  // Handle algorithm selection changes
+  const handleAlgorithmChange = (algorithm) => {
+    setSelectedAlgorithm(algorithm);
+    setDetectedAlgorithm('');
+    
+    // Re-decrypt with new algorithm if we have data and key
+    if (decryptionKey && data.encrypted_level) {
+      const decrypted = performDecryption(data.encrypted_level, decryptionKey, algorithm);
+      if (decrypted !== null) {
+        setDecryptedLevel(decrypted);
+        setDecryptionError('');
+      } else {
+        setDecryptedLevel(null);
+        setDecryptionError('Invalid decryption key, corrupted data, or wrong algorithm');
+      }
+    }
+  };
 
   // Fetch latest data from the API
   const fetchData = async () => {
     try {
-      const response = await axios.get('/api/latest');
+      const response = await axios.get('/api/latest', {
+        params: { encrypted: encryptedMode }
+      });
       setData(response.data);
       setError(null);
+      
+      // Handle encrypted data decryption
+      if (encryptedMode && response.data.encrypted_level && decryptionKey) {
+        const decrypted = performDecryption(response.data.encrypted_level, decryptionKey, selectedAlgorithm);
+        if (decrypted !== null) {
+          setDecryptedLevel(decrypted);
+          setDecryptionError('');
+        } else {
+          setDecryptedLevel(null);
+          setDecryptionError('Invalid decryption key, corrupted data, or wrong algorithm');
+        }
+      } else if (!encryptedMode) {
+        setDecryptedLevel(null);
+        setDecryptionError('');
+        setDetectedAlgorithm('');
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to fetch data. Please check your connection.');
@@ -206,18 +287,44 @@ function App() {
     }, data.refresh_interval_ms); // Use refresh interval from API
     
     return () => clearInterval(interval);
-  }, [data.refresh_interval_ms]); // Re-create interval when refresh_interval_ms changes
+  }, [data.refresh_interval_ms, encryptedMode, decryptionKey, selectedAlgorithm]); // Re-create interval when encrypted mode, key, or algorithm changes
 
   // Calculate water level percentage based on tank height from API
   const calculateWaterHeight = () => {
     const tankHeight = data.tank_height_cm;
-    const percentage = (data.level_cm / tankHeight) * 100;
+    let currentLevel = data.level_cm || 0; // Default to 0 if undefined/null
+    
+    // Use decrypted level if in encrypted mode
+    if (encryptedMode && decryptedLevel !== null) {
+      currentLevel = decryptedLevel;
+    } else if (encryptedMode && !decryptedLevel) {
+      // No valid decrypted data
+      return '0%';
+    }
+    
+    const percentage = (currentLevel / tankHeight) * 100;
     return Math.min(percentage, 100) + '%';
   };
 
   // Toggle history chart visibility
   const toggleHistory = () => {
     setShowHistory(!showHistory);
+  };
+
+  // Toggle encrypted mode
+  const toggleEncryptedMode = (checked) => {
+    setEncryptedMode(checked);
+    setDecryptionKey('');
+    setDecryptedLevel(null);
+    setDecryptionError('');
+    setDetectedAlgorithm('');
+    setShowDecryptionKey(checked);
+    setShowAlgorithmTest(false);
+    
+    // Immediately fetch data for the new mode to prevent blank page
+    setTimeout(() => {
+      fetchData();
+    }, 100);
   };
 
   return (
@@ -242,6 +349,115 @@ function App() {
                 <span className="icon-water">💧</span>
                 Water Level
               </h2>
+              
+              {/* Encrypted Mode Toggle */}
+              <div className="encrypted-mode-section">
+                <div className="control-item">
+                  <span className="switch-label">🔐 Encrypted Data Mode</span>
+                  <Switch
+                    checked={encryptedMode}
+                    onChange={toggleEncryptedMode}
+                    onColor="#8b5cf6"
+                    onHandleColor="#ffffff"
+                    handleDiameter={28}
+                    uncheckedIcon={false}
+                    checkedIcon={false}
+                    boxShadow="0px 2px 4px rgba(0, 0, 0, 0.1)"
+                    activeBoxShadow="0px 0px 0px 3px rgba(139, 92, 246, 0.2)"
+                    height={22}
+                    width={50}
+                    className="custom-switch"
+                  />
+                </div>
+                
+                {encryptedMode && (
+                  <div className="decryption-section">
+                    {/* Algorithm Selection */}
+                    <div className="algorithm-selection">
+                      <label className="algorithm-label">🔍 Algorithm:</label>
+                      <select 
+                        value={selectedAlgorithm} 
+                        onChange={(e) => handleAlgorithmChange(e.target.value)}
+                        className="algorithm-select"
+                      >
+                        <option value="AUTO">Auto-Detect</option>
+                        <option value="DES">DES (Data Encryption Standard)</option>
+                        <option value="XOR">XOR (Simple Cipher)</option>
+                      </select>
+                      <button 
+                        onClick={() => setShowAlgorithmTest(!showAlgorithmTest)}
+                        className="test-algorithm-button"
+                        type="button"
+                      >
+                        {showAlgorithmTest ? '📚 Hide Info' : '📚 Learn More'}
+                      </button>
+                    </div>
+
+                    {/* Algorithm Information */}
+                    {showAlgorithmTest && (
+                      <div className="algorithm-info">
+                        {['XOR', 'DES'].map(alg => {
+                          const info = getAlgorithmInfo(alg);
+                          return (
+                            <div key={alg} className="algorithm-card" style={{borderColor: info.color}}>
+                              <div className="algorithm-header">
+                                <span className="algorithm-emoji">{info.emoji}</span>
+                                <span className="algorithm-name">{info.name}</span>
+                              </div>
+                              <div className="algorithm-details">
+                                <div>📝 {info.description}</div>
+                                <div>🔐 Security: {info.security}</div>
+                                <div>🔑 Key Size: {info.keySize}</div>
+                                <div>📦 Block Size: {info.blockSize}</div>
+                              </div>
+                            </div>
+                          );
+                                                 })}
+                       </div>
+                    )}
+
+                    <div className="decryption-key-input">
+                      <input
+                        type={showDecryptionKey ? "text" : "password"}
+                        placeholder="Enter decryption key"
+                        value={decryptionKey}
+                        onChange={(e) => handleDecryptionKeyChange(e.target.value)}
+                        className="key-input"
+                      />
+                      <button 
+                        onClick={() => setShowDecryptionKey(!showDecryptionKey)}
+                        className="show-key-button"
+                        type="button"
+                      >
+                        {showDecryptionKey ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+                    
+                    {detectedAlgorithm && (
+                      <div className="detected-algorithm">
+                        <span className="detected-label">✅ Detected Algorithm:</span>
+                        <span className="detected-value" style={{color: getAlgorithmInfo(detectedAlgorithm).color}}>
+                          {getAlgorithmInfo(detectedAlgorithm).emoji} {getAlgorithmInfo(detectedAlgorithm).name}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {decryptionError && (
+                      <div className="decryption-error">
+                        {decryptionError}
+                      </div>
+                    )}
+                    
+                    {encryptedMode && data.encrypted_level && (
+                      <div className="encrypted-data-info">
+                        <span className="encrypted-label">Encrypted:</span>
+                        <span className="encrypted-value">{data.encrypted_level}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
               <div className="tank-container">
                 <div className="tank">
                   <div 
@@ -260,7 +476,15 @@ function App() {
                 </div>
               </div>
               <div className="water-level">
-                {data.level_cm.toFixed(1)} cm / {data.tank_height_cm} cm
+                {encryptedMode ? (
+                  decryptedLevel !== null ? (
+                    `${decryptedLevel.toFixed(1)} cm / ${data.tank_height_cm} cm (Decrypted)`
+                  ) : (
+                    `??? cm / ${data.tank_height_cm} cm (Encrypted - Enter Key)`
+                  )
+                ) : (
+                  `${(data.level_cm || 0).toFixed(1)} cm / ${data.tank_height_cm} cm`
+                )}
               </div>
               <div className="timestamp">
                 Last updated: {formatTimestamp(data.timestamp)}
@@ -392,12 +616,14 @@ function App() {
             <div className="card history-card">
               <h2 className="card-title">
                 <span className="icon-chart">📊</span>
-                Water Level History
+                Water Level History {encryptedMode ? '(Encrypted Mode)' : ''}
               </h2>
               <WaterLevelChart 
                 tankHeight={data.tank_height_cm} 
                 maxHistoryMinutesAgo={data.max_history_minutes_ago}
                 refreshIntervalMs={data.refresh_interval_ms}
+                encryptedMode={encryptedMode}
+                decryptionKey={decryptionKey}
               />
             </div>
           )}

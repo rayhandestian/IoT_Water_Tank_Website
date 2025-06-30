@@ -6,11 +6,30 @@ This document provides instructions for interfacing an ESP32 microcontroller wit
 
 The IoT Water Tank system provides a RESTful API specifically designed for ESP32 devices to:
 
-1. Send water level readings to the server
+1. Send water level readings to the server (regular or encrypted mode)
 2. Receive pump control commands
 3. Query the current status of the pump
 
 All ESP32 API endpoints require authentication using an API key.
+
+## Encrypted Data Mode
+
+The system supports an **Encrypted Data Mode** for educational cryptography purposes. In this mode:
+
+- Water level data is encrypted before transmission
+- Data is stored encrypted in a separate database table
+- Simple XOR-based encryption is used for educational demonstration
+- The web interface requires a decryption key to view the data
+
+### Encryption Algorithm
+
+We use a simple XOR cipher with key expansion for educational purposes:
+
+1. **Key Expansion**: Repeat/truncate the key to match data length
+2. **XOR Operation**: Each byte of data is XORed with corresponding key byte
+3. **Hex Encoding**: Result is encoded as hexadecimal string for transmission
+
+**Important**: This is for educational purposes only and should not be used in production systems.
 
 ## Authentication
 
@@ -53,91 +72,150 @@ The API key is configured in the server's `.env` file as `ESP32_API_KEY`. Reques
 - `pump_on`: Boolean indicating if the pump should be turned on (true) or off (false)
 - `auto_mode`: Boolean indicating if the system is in automatic mode
 
-**Example (Arduino/ESP32):**
+### 1b. Send Encrypted Water Level Data
+
+**Endpoint:** `POST /api/encrypted-data`
+
+**Description:** Send encrypted water level measurement to the server for cryptography demonstration.
+
+**Request Headers:**
+- `Content-Type: application/json`
+- `X-API-KEY: your-api-key-here`
+
+**Request Body:**
+```json
+{
+  "encrypted_level": "4D5E2F1A3B4C"
+}
+```
+
+**Response:**
+```json
+{
+  "pump_on": true,
+  "auto_mode": false
+}
+```
+
+**Encryption Implementation:**
+
 ```cpp
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
-
-const char* ssid = "YourWiFiSSID";
-const char* password = "YourWiFiPassword";
-const char* serverUrl = "http://your-server-ip:3000/api/data";
-const char* apiKey = "your-api-key-here";
-
-void setup() {
-  Serial.begin(115200);
-  WiFi.begin(ssid, password);
+// Simple XOR encryption for educational purposes
+String encryptWaterLevel(float level, String key) {
+  String dataStr = String(level, 1); // Convert to string with 1 decimal place
+  String result = "";
   
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
+  for (int i = 0; i < dataStr.length(); i++) {
+    char dataChar = dataStr.charAt(i);
+    char keyChar = key.charAt(i % key.length()); // Repeat key if shorter than data
+    char encrypted = dataChar ^ keyChar;
+    
+    // Convert to hex (2 characters per byte)
+    if (encrypted < 16) {
+      result += "0";
+    }
+    result += String(encrypted, HEX);
   }
   
-  Serial.println("Connected to WiFi");
+  result.toUpperCase(); // Convert to uppercase hex
+  return result;
 }
 
+// Usage in your main loop:
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    // Read water level from your sensor
     float waterLevel = readWaterLevelSensor();
     
-    // Create HTTP client
-    HTTPClient http;
-    http.begin(serverUrl);
+    // For encrypted mode, encrypt the water level
+    String encryptionKey = "MySecretKey123"; // Use your chosen key
+    String encryptedLevel = encryptWaterLevel(waterLevel, encryptionKey);
     
-    // Set headers
+    // Send encrypted data
+    HTTPClient http;
+    http.begin("http://your-server-ip:3000/api/encrypted-data");
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-API-KEY", apiKey);
     
-    // Prepare JSON payload
+    // Prepare JSON payload with encrypted data
     DynamicJsonDocument doc(200);
-    doc["level_cm"] = waterLevel;
+    doc["encrypted_level"] = encryptedLevel;
     String requestBody;
     serializeJson(doc, requestBody);
     
     // Send POST request
     int httpResponseCode = http.POST(requestBody);
     
-    if (httpResponseCode > 0) {
-      String response = http.getString();
-      
-      // Parse response
-      DynamicJsonDocument responseDoc(200);
-      deserializeJson(responseDoc, response);
-      
-      bool pumpOn = responseDoc["pump_on"];
-      bool autoMode = responseDoc["auto_mode"];
-      
-      // Control pump based on response
-      if (pumpOn) {
-        // Turn pump ON
-        digitalWrite(PUMP_PIN, HIGH);
-      } else {
-        // Turn pump OFF
-        digitalWrite(PUMP_PIN, LOW);
-      }
-      
-      Serial.println("Pump status: " + String(pumpOn ? "ON" : "OFF"));
-      Serial.println("Auto mode: " + String(autoMode ? "ENABLED" : "DISABLED"));
-    } else {
-      Serial.print("Error on sending POST: ");
-      Serial.println(httpResponseCode);
-    }
+    // Handle response same as regular mode...
     
     http.end();
-    
-    // Wait before next reading
     delay(30000); // 30 seconds
   }
 }
-
-float readWaterLevelSensor() {
-  // Replace with your actual sensor reading code
-  // Example: using ultrasonic sensor to measure distance to water surface
-  // and converting to water level in cm
-  return 75.5;
-}
 ```
+
+**MicroPython Implementation:**
+
+```python
+def encrypt_water_level(level, key):
+    """Simple XOR encryption for educational purposes"""
+    data_str = "{:.1f}".format(level)  # Convert to string with 1 decimal
+    result = ""
+    
+    for i, char in enumerate(data_str):
+        data_byte = ord(char)
+        key_byte = ord(key[i % len(key)])  # Repeat key if shorter
+        encrypted_byte = data_byte ^ key_byte
+        
+        # Convert to hex (2 characters per byte)
+        result += "{:02X}".format(encrypted_byte)
+    
+    return result
+
+def send_encrypted_water_level():
+    """Send encrypted water level to server"""
+    try:
+        water_level = read_water_level()
+        encryption_key = "MySecretKey123"  # Use your chosen key
+        encrypted_level = encrypt_water_level(water_level, encryption_key)
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'X-API-KEY': API_KEY
+        }
+        
+        data = {
+            'encrypted_level': encrypted_level
+        }
+        
+        response = urequests.post(
+            SERVER_URL + "/encrypted-data", 
+            headers=headers,
+            json=data
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            pump_on = response_data.get('pump_on', False)
+            auto_mode = response_data.get('auto_mode', True)
+            
+            control_pump(pump_on)
+            
+            print("Encrypted data sent successfully")
+            print("Original level:", water_level, "cm")
+            print("Encrypted:", encrypted_level)
+        else:
+            print("Error sending encrypted data:", response.status_code)
+            
+        response.close()
+    except Exception as e:
+        print("Exception in send_encrypted_water_level:", e)
+```
+
+**Key Selection Guidelines:**
+- Use alphanumeric characters for simplicity
+- Key should be 8-16 characters long
+- Remember the key - you'll need it to decrypt data on the web interface
+- Example keys: "MySecretKey123", "CryptoDemo456", "WaterTank2024"
 
 ### 2. Check Pump Status
 
@@ -828,4 +906,235 @@ void handleServerError() {
 2. **Deep Sleep**: Use ESP32 deep sleep between readings to save power
 3. **Additional Sensors**: Add temperature, pressure, or flow rate sensors
 4. **Local Control**: Implement a local web interface for when the main server is down
-5. **Battery Monitoring**: Add battery level monitoring for battery-powered setups 
+5. **Battery Monitoring**: Add battery level monitoring for battery-powered setups
+
+## Complete Implementation Example
+
+Here's a complete Arduino/ESP32 implementation that supports both regular and encrypted modes:
+
+```cpp
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+// Configuration
+const char* ssid = "YourWiFiSSID";
+const char* password = "YourWiFiPassword";
+const char* serverUrl = "http://your-server-ip:3000/api";
+const char* apiKey = "your-api-key-here";
+
+// Encryption settings
+const String encryptionKey = "MySecretKey123"; // Your encryption key
+const bool USE_ENCRYPTED_MODE = false; // Set to true for encrypted mode
+
+// Pin definitions
+#define PUMP_PIN 23
+#define TRIGGER_PIN 5
+#define ECHO_PIN 18
+#define TANK_HEIGHT 100
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Initialize pins
+  pinMode(PUMP_PIN, OUTPUT);
+  digitalWrite(PUMP_PIN, LOW);
+  
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
+  
+  // Print mode
+  Serial.println("Mode: " + String(USE_ENCRYPTED_MODE ? "ENCRYPTED" : "REGULAR"));
+  if (USE_ENCRYPTED_MODE) {
+    Serial.println("Encryption Key: " + encryptionKey);
+  }
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    float waterLevel = readWaterLevelSensor();
+    
+    if (USE_ENCRYPTED_MODE) {
+      sendEncryptedData(waterLevel);
+    } else {
+      sendRegularData(waterLevel);
+    }
+    
+    // Wait before next reading
+    delay(30000); // 30 seconds
+  }
+}
+
+// Regular mode data transmission
+void sendRegularData(float waterLevel) {
+  HTTPClient http;
+  http.begin(String(serverUrl) + "/data");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-KEY", apiKey);
+  
+  DynamicJsonDocument doc(200);
+  doc["level_cm"] = waterLevel;
+  String requestBody;
+  serializeJson(doc, requestBody);
+  
+  int httpResponseCode = http.POST(requestBody);
+  handleResponse(httpResponseCode, http.getString(), waterLevel, "REGULAR");
+  
+  http.end();
+}
+
+// Encrypted mode data transmission
+void sendEncryptedData(float waterLevel) {
+  String encryptedLevel = encryptWaterLevel(waterLevel, encryptionKey);
+  
+  HTTPClient http;
+  http.begin(String(serverUrl) + "/encrypted-data");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-KEY", apiKey);
+  
+  DynamicJsonDocument doc(200);
+  doc["encrypted_level"] = encryptedLevel;
+  String requestBody;
+  serializeJson(doc, requestBody);
+  
+  int httpResponseCode = http.POST(requestBody);
+  handleResponse(httpResponseCode, http.getString(), waterLevel, "ENCRYPTED");
+  
+  http.end();
+}
+
+// Handle server response
+void handleResponse(int httpCode, String response, float originalLevel, String mode) {
+  if (httpCode > 0) {
+    DynamicJsonDocument responseDoc(200);
+    deserializeJson(responseDoc, response);
+    
+    bool pumpOn = responseDoc["pump_on"];
+    bool autoMode = responseDoc["auto_mode"];
+    
+    // Control pump
+    digitalWrite(PUMP_PIN, pumpOn ? HIGH : LOW);
+    
+    // Log results
+    Serial.println("=== " + mode + " MODE TRANSMISSION ===");
+    Serial.println("Water Level: " + String(originalLevel, 1) + " cm");
+    if (mode == "ENCRYPTED") {
+      Serial.println("Encrypted: " + encryptWaterLevel(originalLevel, encryptionKey));
+    }
+    Serial.println("Pump Status: " + String(pumpOn ? "ON" : "OFF"));
+    Serial.println("Auto Mode: " + String(autoMode ? "ENABLED" : "DISABLED"));
+    Serial.println("HTTP Code: " + String(httpCode));
+    Serial.println("===============================");
+  } else {
+    Serial.println("Error: HTTP " + String(httpCode));
+    handleServerError(originalLevel);
+  }
+}
+
+// XOR encryption function
+String encryptWaterLevel(float level, String key) {
+  String dataStr = String(level, 1); // Convert to string with 1 decimal place
+  String result = "";
+  
+  for (int i = 0; i < dataStr.length(); i++) {
+    char dataChar = dataStr.charAt(i);
+    char keyChar = key.charAt(i % key.length()); // Repeat key if shorter than data
+    char encrypted = dataChar ^ keyChar;
+    
+    // Convert to hex (2 characters per byte)
+    if (encrypted < 16) {
+      result += "0";
+    }
+    result += String(encrypted, HEX);
+  }
+  
+  result.toUpperCase(); // Convert to uppercase hex
+  return result;
+}
+
+// Water level sensor reading
+float readWaterLevelSensor() {
+  // Ultrasonic sensor implementation
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  float distance = (duration * 0.034) / 2; // Convert to cm
+  
+  // Convert distance to water level
+  float waterLevel = TANK_HEIGHT - distance;
+  
+  // Validate readings
+  if (waterLevel < 0) waterLevel = 0;
+  if (waterLevel > TANK_HEIGHT) waterLevel = TANK_HEIGHT;
+  
+  return waterLevel;
+}
+
+// Emergency pump control when server is unavailable
+void handleServerError(float waterLevel) {
+  Serial.println("SERVER ERROR: Using local emergency control");
+  
+  // Simple emergency thresholds
+  if (waterLevel < 10.0) {
+    digitalWrite(PUMP_PIN, HIGH); // Turn on pump
+    Serial.println("Emergency: PUMP ON (Low water)");
+  } else if (waterLevel > 90.0) {
+    digitalWrite(PUMP_PIN, LOW); // Turn off pump
+    Serial.println("Emergency: PUMP OFF (High water)");
+  }
+}
+```
+
+## Testing Your Implementation
+
+1. **Start with Regular Mode**: Set `USE_ENCRYPTED_MODE = false` and test basic functionality
+2. **Switch to Encrypted Mode**: Set `USE_ENCRYPTED_MODE = true` and verify data transmission
+3. **Monitor Serial Output**: Check the serial monitor for encryption debugging information
+4. **Test Web Interface**: Use the web dashboard to verify data is being received correctly
+
+## Security Considerations (Educational)
+
+This implementation demonstrates basic encryption concepts but has several educational limitations:
+
+1. **Key Management**: The key is hardcoded (in production, use secure key exchange)
+2. **Algorithm Strength**: XOR is educational but not cryptographically secure
+3. **Key Reuse**: The same key is used repeatedly (vulnerable to pattern analysis)
+4. **No Authentication**: No message authentication or integrity checking
+
+For production systems, consider:
+- AES encryption with proper key management
+- Message authentication codes (MAC)
+- Secure key distribution protocols
+- Regular key rotation
+
+## Decryption Function (For Reference)
+
+Here's the corresponding decryption function for completeness:
+
+```cpp
+String decryptWaterLevel(String encryptedHex, String key) {
+  String result = "";
+  
+  // Convert hex string back to bytes and decrypt
+  for (int i = 0; i < encryptedHex.length(); i += 2) {
+    String hexByte = encryptedHex.substring(i, i + 2);
+    char encryptedByte = (char)strtol(hexByte.c_str(), NULL, 16);
+    char keyByte = key.charAt((i/2) % key.length());
+    char decryptedByte = encryptedByte ^ keyByte;
+    result += decryptedByte;
+  }
+  
+  return result;
+}
+```
+
+**Note**: This decryption function is for educational reference only. In the actual system, decryption happens on the web interface where users enter their decryption key. 
