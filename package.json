@@ -12,10 +12,13 @@
     "setup": "npm install & npm run frontend:install",
     "build": "npm run frontend:build",
     "dev:all": "npx concurrently \"npm run dev\" \"npm run frontend:dev\"",
-    "postinstall": "npm run frontend:install && npm run frontend:build"
+    "postinstall": "npm run frontend:install && npm run frontend:build",
+    "hash-password": "node utils/hash-password.js",
+    "migrate-temp-passwords": "node utils/migrate-temp-passwords.js"
   },
   "dependencies": {
     "axios": "^1.10.0",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.18.2",

@@ -39,6 +39,7 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS temporary_passwords (
         id INT AUTO_INCREMENT PRIMARY KEY,
         password VARCHAR(255) NOT NULL,
+        nickname VARCHAR(100) NOT NULL DEFAULT 'Unnamed Password',
         expires_at DATETIME NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_by VARCHAR(100) DEFAULT 'admin'
@@ -250,10 +251,12 @@ const createMockPool = () => {
       
       if (sql.includes('INSERT INTO temporary_passwords')) {
         const password = params[0];
-        const expiresAt = params[1];
+        const nickname = params[1];
+        const expiresAt = params[2];
         const newRecord = {
           id: mockData.temporary_passwords.length + 1,
           password,
+          nickname: nickname || 'Unnamed Password',
           expires_at: expiresAt,
           created_at: new Date(),
           created_by: 'admin'
@@ -266,6 +269,10 @@ const createMockPool = () => {
         if (sql.includes('WHERE password = ?')) {
           const password = params[0];
           return [mockData.temporary_passwords.filter(p => p.password === password)];
+        }
+        if (sql.includes('WHERE nickname = ?')) {
+          const nickname = params[0];
+          return [mockData.temporary_passwords.filter(p => p.nickname === nickname)];
         }
         return [mockData.temporary_passwords];
       }

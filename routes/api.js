@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const bcrypt = require('bcrypt');
 
 // Get configuration from environment variables, with defaults
 const TANK_HEIGHT_CM = parseInt(process.env.TANK_HEIGHT_CM || '100', 10);
@@ -26,48 +27,79 @@ const isPasswordExpired = (expiresAt) => {
 };
 
 // Middleware to validate main admin password (for managing temporary passwords)
-const validateMainPassword = (req, res, next) => {
+const validateMainPassword = async (req, res, next) => {
   const password = req.body.password;
-  const validPassword = process.env.PUMP_CONTROL_PASSWORD;
+  const validPasswordHash = process.env.PUMP_CONTROL_PASSWORD;
   
-  if (!password || password !== validPassword) {
+  if (!password) {
     return res.status(401).json({ error: 'Unauthorized: Invalid main password' });
   }
   
-  next();
+  try {
+    const isValid = await bcrypt.compare(password, validPasswordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid main password' });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error validating main password:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 // Middleware to validate pump control password (main or temporary)
 const validatePumpPassword = async (req, res, next) => {
   const password = req.body.password;
-  const mainPassword = process.env.PUMP_CONTROL_PASSWORD;
+  const mainPasswordHash = process.env.PUMP_CONTROL_PASSWORD;
   
   if (!password) {
     return res.status(401).json({ error: 'Unauthorized: Password required' });
   }
   
   // Check main password first
-  if (password === mainPassword) {
-    req.isMainPassword = true;
-    return next();
+  try {
+    const isMainPassword = await bcrypt.compare(password, mainPasswordHash);
+    if (isMainPassword) {
+      req.isMainPassword = true;
+      return next();
+    }
+  } catch (error) {
+    console.error('Error validating main password:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
   
   // Check temporary passwords
   try {
     const pool = db.getPool();
     const [rows] = await pool.query(
-      'SELECT id, expires_at FROM temporary_passwords WHERE password = ?',
-      [password]
+      'SELECT id, password, expires_at FROM temporary_passwords',
+      []
     );
     
-    if (rows.length === 0) {
+    let validTempPassword = null;
+    
+    // Check each temporary password with bcrypt
+    for (const row of rows) {
+      try {
+        const isValid = await bcrypt.compare(password, row.password);
+        if (isValid) {
+          validTempPassword = row;
+          break;
+        }
+      } catch (compareError) {
+        console.error('Error comparing temporary password:', compareError);
+        continue;
+      }
+    }
+    
+    if (!validTempPassword) {
       return res.status(401).json({ error: 'Unauthorized: Invalid password' });
     }
     
-    const tempPassword = rows[0];
-    if (isPasswordExpired(tempPassword.expires_at)) {
+    if (isPasswordExpired(validTempPassword.expires_at)) {
       // Clean up expired password
-      await pool.query('DELETE FROM temporary_passwords WHERE id = ?', [tempPassword.id]);
+      await pool.query('DELETE FROM temporary_passwords WHERE id = ?', [validTempPassword.id]);
       return res.status(401).json({ error: 'Unauthorized: Password has expired' });
     }
     
@@ -263,10 +295,18 @@ router.get('/history', asyncHandler(async (req, res) => {
 // POST /api/validate-password - Validate pump control password
 router.post('/validate-password', asyncHandler(async (req, res) => {
   const { password } = req.body;
-  const mainPassword = process.env.PUMP_CONTROL_PASSWORD;
+  const mainPasswordHash = process.env.PUMP_CONTROL_PASSWORD;
   
-  if (password === mainPassword) {
-    res.json({ success: true, valid: true, isMainPassword: true });
+  // Check main password first
+  try {
+    const isMainPassword = await bcrypt.compare(password, mainPasswordHash);
+    if (isMainPassword) {
+      res.json({ success: true, valid: true, isMainPassword: true });
+      return;
+    }
+  } catch (error) {
+    console.error('Error validating main password:', error);
+    res.json({ success: true, valid: false });
     return;
   }
   
@@ -274,19 +314,34 @@ router.post('/validate-password', asyncHandler(async (req, res) => {
   try {
     const pool = db.getPool();
     const [rows] = await pool.query(
-      'SELECT id, expires_at FROM temporary_passwords WHERE password = ?',
-      [password]
+      'SELECT id, password, expires_at FROM temporary_passwords',
+      []
     );
     
-    if (rows.length === 0) {
+    let validTempPassword = null;
+    
+    // Check each temporary password with bcrypt
+    for (const row of rows) {
+      try {
+        const isValid = await bcrypt.compare(password, row.password);
+        if (isValid) {
+          validTempPassword = row;
+          break;
+        }
+      } catch (compareError) {
+        console.error('Error comparing temporary password:', compareError);
+        continue;
+      }
+    }
+    
+    if (!validTempPassword) {
       res.json({ success: true, valid: false });
       return;
     }
     
-    const tempPassword = rows[0];
-    if (isPasswordExpired(tempPassword.expires_at)) {
+    if (isPasswordExpired(validTempPassword.expires_at)) {
       // Clean up expired password
-      await pool.query('DELETE FROM temporary_passwords WHERE id = ?', [tempPassword.id]);
+      await pool.query('DELETE FROM temporary_passwords WHERE id = ?', [validTempPassword.id]);
       res.json({ success: true, valid: false });
       return;
     }
@@ -340,7 +395,7 @@ router.get('/config', (req, res) => {
 router.get('/temp-passwords', validateMainPassword, asyncHandler(async (req, res) => {
   const pool = db.getPool();
   const [rows] = await pool.query(
-    'SELECT id, password, expires_at, created_at, created_by FROM temporary_passwords ORDER BY created_at DESC'
+    'SELECT id, nickname, expires_at, created_at, created_by FROM temporary_passwords ORDER BY created_at DESC'
   );
   
   // Clean up expired passwords
@@ -359,7 +414,7 @@ router.get('/temp-passwords', validateMainPassword, asyncHandler(async (req, res
 router.post('/temp-passwords/list', validateMainPassword, asyncHandler(async (req, res) => {
   const pool = db.getPool();
   const [rows] = await pool.query(
-    'SELECT id, password, expires_at, created_at, created_by FROM temporary_passwords ORDER BY created_at DESC'
+    'SELECT id, nickname, expires_at, created_at, created_by FROM temporary_passwords ORDER BY created_at DESC'
   );
   
   // Clean up expired passwords
@@ -376,15 +431,30 @@ router.post('/temp-passwords/list', validateMainPassword, asyncHandler(async (re
 
 // POST /api/temp-passwords - Create new temporary password
 router.post('/temp-passwords', validateMainPassword, asyncHandler(async (req, res) => {
-  const { newPassword, expirationMinutes } = req.body;
+  const { newPassword, nickname, expirationMinutes } = req.body;
   const password = newPassword;
   
   if (!password || password.trim().length < 3) {
     return res.status(400).json({ error: 'Password must be at least 3 characters long' });
   }
   
-  if (password === process.env.PUMP_CONTROL_PASSWORD) {
-    return res.status(400).json({ error: 'Temporary password cannot be the same as main password' });
+  if (!nickname || nickname.trim().length === 0) {
+    return res.status(400).json({ error: 'Nickname is required' });
+  }
+  
+  if (nickname.trim().length > 100) {
+    return res.status(400).json({ error: 'Nickname must be 100 characters or less' });
+  }
+  
+  // Check if new password matches main password
+  try {
+    const isMainPassword = await bcrypt.compare(password, process.env.PUMP_CONTROL_PASSWORD);
+    if (isMainPassword) {
+      return res.status(400).json({ error: 'Temporary password cannot be the same as main password' });
+    }
+  } catch (error) {
+    console.error('Error checking password against main password:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
   
   let expiresAt = null;
@@ -394,15 +464,18 @@ router.post('/temp-passwords', validateMainPassword, asyncHandler(async (req, re
   
   const pool = db.getPool();
   
-  // Check if password already exists
-  const [existing] = await pool.query('SELECT id FROM temporary_passwords WHERE password = ?', [password]);
-  if (existing.length > 0) {
-    return res.status(400).json({ error: 'This password already exists' });
+  // Check if nickname already exists
+  const [existingNickname] = await pool.query('SELECT id FROM temporary_passwords WHERE nickname = ?', [nickname.trim()]);
+  if (existingNickname.length > 0) {
+    return res.status(400).json({ error: 'This nickname already exists. Please choose a different one.' });
   }
   
+  // Hash the password
+  const hashedPassword = await bcrypt.hash(password.trim(), 12);
+  
   await pool.query(
-    'INSERT INTO temporary_passwords (password, expires_at) VALUES (?, ?)',
-    [password, expiresAt]
+    'INSERT INTO temporary_passwords (password, nickname, expires_at) VALUES (?, ?, ?)',
+    [hashedPassword, nickname.trim(), expiresAt]
   );
   
   res.json({ success: true, message: 'Temporary password created successfully' });

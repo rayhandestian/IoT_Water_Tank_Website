@@ -27,6 +27,7 @@ function App() {
   const [showPasswordManager, setShowPasswordManager] = useState(false);
   const [tempPasswords, setTempPasswords] = useState([]);
   const [newPassword, setNewPassword] = useState('');
+  const [newPasswordNickname, setNewPasswordNickname] = useState('');
   const [expirationMinutes, setExpirationMinutes] = useState('');
   const [passwordError, setPasswordError] = useState('');
   
@@ -225,14 +226,26 @@ function App() {
       return;
     }
 
+    if (!newPasswordNickname.trim()) {
+      setPasswordError('Please enter a nickname for this password');
+      return;
+    }
+
+    if (newPasswordNickname.trim().length > 100) {
+      setPasswordError('Nickname must be 100 characters or less');
+      return;
+    }
+
     try {
       await axios.post('/api/temp-passwords', {
         password: password, // Main password for auth
         newPassword: newPassword, // The new temporary password
+        nickname: newPasswordNickname.trim(), // Nickname for the password
         expirationMinutes: expirationMinutes ? parseInt(expirationMinutes) : null
       });
       
       setNewPassword('');
+      setNewPasswordNickname('');
       setExpirationMinutes('');
       setPasswordError('');
       fetchTempPasswords();
@@ -655,6 +668,14 @@ function App() {
                 <div className="create-password-form">
                   <input
                     type="text"
+                    placeholder="Nickname/description (required)"
+                    value={newPasswordNickname}
+                    onChange={(e) => setNewPasswordNickname(e.target.value)}
+                    className="new-password-input"
+                    maxLength="100"
+                  />
+                  <input
+                    type="text"
                     placeholder="New password (min 3 characters)"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -686,7 +707,7 @@ function App() {
                     {tempPasswords.map((pwd) => (
                       <div key={pwd.id} className="password-item">
                         <div className="password-info">
-                          <span className="password-text">{pwd.password}</span>
+                          <span className="password-text">🔑 {pwd.nickname}</span>
                           <span className="password-expiry">{formatExpiration(pwd.expires_at)}</span>
                           <span className="password-created">
                             Created: {new Date(pwd.created_at).toLocaleString()}
