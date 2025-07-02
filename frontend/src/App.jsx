@@ -637,6 +637,7 @@ function App() {
                 refreshIntervalMs={data.refresh_interval_ms}
                 encryptedMode={encryptedMode}
                 decryptionKey={decryptionKey}
+                selectedAlgorithm={selectedAlgorithm}
               />
             </div>
           )}

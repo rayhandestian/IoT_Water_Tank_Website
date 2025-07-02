@@ -11,6 +11,7 @@ import {
   Legend
 } from 'chart.js';
 import axios from 'axios';
+import { decryptWaterLevel } from '../utils/crypto';
 
 // Register ChartJS components
 ChartJS.register(
@@ -62,7 +63,8 @@ const WaterLevelChart = ({
   maxHistoryMinutesAgo = 60, 
   refreshIntervalMs = 5000,
   encryptedMode = false,
-  decryptionKey = '' 
+  decryptionKey = '',
+  selectedAlgorithm = 'AUTO'
 }) => {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,28 +103,10 @@ const WaterLevelChart = ({
     return gradient;
   }, []);
 
-  // XOR Decryption function (same as in App.jsx)
-  const decryptWaterLevel = useCallback((encryptedHex, key) => {
-    try {
-      if (!encryptedHex || !key) return null;
-      
-      let result = '';
-      
-      // Convert hex string back to bytes and decrypt
-      for (let i = 0; i < encryptedHex.length; i += 2) {
-        const hexByte = encryptedHex.substring(i, i + 2);
-        const encryptedByte = parseInt(hexByte, 16);
-        const keyByte = key.charCodeAt(Math.floor(i/2) % key.length);
-        const decryptedByte = encryptedByte ^ keyByte;
-        result += String.fromCharCode(decryptedByte);
-      }
-      
-      const decryptedValue = parseFloat(result);
-      return isNaN(decryptedValue) ? null : decryptedValue;
-    } catch (error) {
-      console.error('Chart decryption error:', error);
-      return null;
-    }
+  // Use crypto utilities for consistent decryption
+  const performDecryption = useCallback((encryptedHex, key, algorithm = 'AUTO') => {
+    const result = decryptWaterLevel(encryptedHex, key, algorithm);
+    return result.success ? result.value : null;
   }, []);
 
   // Process encrypted data when key changes
@@ -130,7 +114,7 @@ const WaterLevelChart = ({
     if (encryptedMode && decryptionKey && historyData.length > 0) {
       const processed = historyData.map(item => {
         if (item.encrypted_level) {
-          const decrypted = decryptWaterLevel(item.encrypted_level, decryptionKey);
+          const decrypted = performDecryption(item.encrypted_level, decryptionKey, selectedAlgorithm);
           return {
             ...item,
             level_cm: decrypted,
@@ -144,7 +128,7 @@ const WaterLevelChart = ({
     } else {
       setDecryptedData([]);
     }
-  }, [historyData, encryptedMode, decryptionKey, decryptWaterLevel]);
+  }, [historyData, encryptedMode, decryptionKey, selectedAlgorithm, performDecryption]);
 
   // Fetch history data with error recovery
   const fetchHistoryData = useCallback(async (isRetry = false) => {
@@ -411,8 +395,9 @@ const WaterLevelChart = ({
         callbacks: {
           title: function(context) {
             const dataIndex = context[0].dataIndex;
-            const originalTimestamp = historyData[dataIndex].timestamp;
-            return formatTooltipTimestamp(originalTimestamp);
+            const dataToUse = encryptedMode ? decryptedData : historyData;
+            const originalTimestamp = dataToUse[dataIndex]?.timestamp;
+            return originalTimestamp ? formatTooltipTimestamp(originalTimestamp) : '';
           },
           label: function(context) {
             const label = context.dataset.label || '';
@@ -432,7 +417,7 @@ const WaterLevelChart = ({
     },
     // Mobile-specific optimizations
     devicePixelRatio: isMobile ? 1 : undefined, // Reduce pixel ratio on mobile for better performance
-  }), [tankHeight, maxHistoryMinutesAgo, historyData, formatTooltipTimestamp, isMobile]);
+  }), [tankHeight, maxHistoryMinutesAgo, historyData, decryptedData, encryptedMode, formatTooltipTimestamp, isMobile]);
 
   // Render loading state
   if (loading && !historyData.length) {
